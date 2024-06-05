@@ -61,7 +61,61 @@ def initialize_value_table(cities, pop_size=50, generations=100):
     
     return value_table, best_ind, best_value
 
-# value table에서 Policy 추출
+
+# Q-Learning 함수
+def q_learning(cities, alpha=0.1, gamma=0.9, epsilon=0.1, episodes=100):
+    num_cities = len(cities)
+    Q = np.zeros((num_cities, num_cities))
+
+    for episode in range(episodes):
+        state = random.randint(0, num_cities - 1)
+        visited = [state]
+        
+        while len(visited) < num_cities:
+            if random.uniform(0, 1) < epsilon:
+                action = random.randint(0, num_cities - 1)
+            else:
+                action = np.argmin(Q[state, :])
+
+            if action not in visited:
+                next_state = action
+                reward = -distance(cities[state], cities[next_state]) # -distance로 할 것인지, 1/distance 로 할 것인지?
+                best_next_action = np.argmin(Q[next_state, :])
+
+                # Temporal Difference 기법으로 각 단계마다 Q 값을 업데이트. 다음 상태로 이동할 때마다 즉시 Q 값을 수정
+                td_target = reward + gamma * Q[next_state, best_next_action]
+                td_error = td_target - Q[state, action]
+                Q[state, action] += alpha * td_error
+
+                visited.append(next_state)
+                state = next_state
+
+        # Monte Carlo 기법으로 전체 에피소드가 끝난 후에 반환값을 계산하여 Q 값을 업데이트
+        reward = -distance(cities[state], cities[visited[0]])
+        Q[state, visited[0]] += alpha * (reward - Q[state, visited[0]])
+
+    return Q
+
+# Policy 추출 함수
+def extract_policy_from_q(Q):
+    num_cities = Q.shape[0]
+    policy = [0]
+    current_city = 0
+    visited = set(policy)
+
+    while len(policy) < num_cities:
+        next_city = np.argmin(Q[current_city, :])
+        while next_city in visited:
+            Q[current_city, next_city] = float('inf')
+            next_city = np.argmin(Q[current_city, :])
+        policy.append(next_city)
+        visited.add(next_city)
+        current_city = next_city
+
+    policy.append(policy[0])
+    return policy
+
+# value table(도시 간의 거리를 미리 계산하여 저장한 2차원 배열)에서 Policy 추출
 def extract_policy(value_table):
     num_cities = len(value_table)
     visited = [False] * num_cities
@@ -82,7 +136,11 @@ def extract_policy(value_table):
 
 cities = load_cities('./2024_AI_TSP.csv')
 value_table, best_solution, best_value = initialize_value_table(cities) # value table 초기화
-policy = extract_policy(value_table) # policy 추출
+# policy = extract_policy(value_table) # policy 추출(1번)
+
+# (밑에 2번)
+Q = q_learning(cities)  # Q-Learning을 통해 Q 값 학습
+policy = extract_policy_from_q(Q)  # Q 값으로부터 최적 policy 추출
 
 # policy 평가
 def evaluate_policy(policy, cities):
